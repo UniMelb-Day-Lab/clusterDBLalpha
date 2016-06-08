@@ -1,6 +1,7 @@
 import sys, os
 import argparse
 from subprocess import check_call
+import numpy as np
 
 USEARCH = "usearch"
 
@@ -52,9 +53,17 @@ def checkInputAndClean(readfile, outdir, verbose):
   if verbose:
     print "setting up fasta file..."
 
+  read_set = set()
+
   outputfile = outdir + os.path.splitext(os.path.basename(readfile))[0] + "_renamed.fasta"
   with open(outputfile, 'w') as outfile:
     for h,s in readFasta(readfile):
+
+      r = h.split(";")[0]
+      if r in read_set:
+        MyError("Reads may be duplicated!")
+      read_set.add(r)
+
       if "sample=" in h:
         #is already in usearch format.
         if "size=" in h:
@@ -120,7 +129,23 @@ def cluster(readfile, per_id, cpu, verbose):
 
   return file_preface + "_otuTable.txt"
 
-# def convertToBinaryMatrix(outfile, verbose):
+def convertToBinaryMatrix(otufile, verbose):
+  file_preface = os.path.splitext(otufile)[0]
+
+  if verbose:
+    print "converting to binary matrix..."
+
+  with open(file_preface + "_binary.txt", 'w') as outfile:
+    with open(otufile, 'r') as infile:
+      outfile.write(infile.next())
+      for line in infile:
+        line=line.split()
+        array = np.array(map(int, line[1:]))
+        array[array>0] = 1
+        outfile.write("\t".join([line[0]]
+          + list(array.astype('str'))) + "\n")
+
+  return file_preface + "_binary.txt"
 
 
 
@@ -156,7 +181,9 @@ def main():
 
   renamed_reads = checkInputAndClean(args.read, args.outputdir, args.verbose)
 
-  cluster(renamed_reads, args.perID, args.cpu, args.verbose)
+  otu_table = cluster(renamed_reads, args.perID, args.cpu, args.verbose)
+
+  convertToBinaryMatrix(otu_table, args.verbose)
 
   return
 
